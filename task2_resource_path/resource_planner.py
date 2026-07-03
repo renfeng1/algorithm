@@ -135,13 +135,26 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
             queue.append(next_state)
 
     # 3. 终点选择与最优路径重建
-    # 业务意图：从所有到达终点的可能状态中，查询最优的那个状态（收益最大，步数最短）
+    # 业务意图：评估一条路径的资源收集效率分数（获得的资源 / 走的步数）
+    # 特殊处理：对于负收益（踩陷阱），步数越多应该越劣（因此乘以 steps）；对于步数为 0 的情况进行安全规避
+    def evaluate_efficiency_score(gain: int, steps: int) -> float:
+        if steps == 0:
+            return float(gain)
+        return gain / steps if gain >= 0 else gain * steps
+
+    # 业务意图：从所有到达终点的可能状态中，查询最优的那个状态（资源收集效率最高，步数最短）
     def query_best_exit_state() -> Tuple[int, int, int] | None:
         if not exit_states:
             return None
         return max(
             exit_states,
-            key=lambda s: (evaluate_accumulated_gain_from_bitmap(collected_bitmap_of(s)), -depth[s])
+            key=lambda s: (
+                evaluate_efficiency_score(
+                    evaluate_accumulated_gain_from_bitmap(collected_bitmap_of(s)),
+                    depth[s]
+                ),
+                -depth[s]
+            )
         )
 
     best_exit_state = query_best_exit_state()
