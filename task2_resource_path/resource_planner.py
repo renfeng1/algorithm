@@ -73,55 +73,85 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
 
     initial_collected_bitmap = try_trigger_resource_at(0, start)
 
+    # 1. 状态定义与初始化
+    # 每个搜索状态表示为：(行, 列, 当前已收集资源的位图)
     state = (start[0], start[1], initial_collected_bitmap)
     queue = deque([state])
+    
+    # 状态转移父节点表，用于后续逆向回溯重建最优物理路径
     parent: Dict[Tuple[int, int, int], Tuple[int, int, int] | None] = {state: None}
+    
+    # 记录每个状态的移动步数（路径长度），用于在收益相同时进行“短路径优先”的仲裁
     depth: Dict[Tuple[int, int, int], int] = {state: 0}
+    
+    # 终点最优状态指针，初始化为 None（除非起点即终点）
     best_exit_state = state if start == exit_pos else None
 
+    # 2. 状态空间搜索（BFS 遍历）
     while queue:
         r, c, collected_bitmap = queue.popleft()
         current_state = (r, c, collected_bitmap)
+        
+        # 如果当前状态到达了终点坐标
         if (r, c) == exit_pos:
             if best_exit_state is None:
+                # 第一次到达终点，将其记为当前最优终点状态
                 best_exit_state = current_state
             else:
+                # 已经有候选最优终点状态，进行双关键字评估仲裁：
+                # 优先级 1：最大化资源总收益（越多越好）
+                # 优先级 2：若收益相同，则最小化步数/路径深度（越短越好）
                 current_key = (evaluate_accumulated_gain(collected_bitmap), -depth[current_state])
                 best_key = (evaluate_accumulated_gain(best_exit_state[2]), -depth[best_exit_state])
                 if current_key > best_key:
                     best_exit_state = current_state
+            # 注意：到达终点后不继续向外扩展，因为不需要经过终点后再折返回终点
             continue
 
+        # 遍历当前位置的相邻网格
         for nxt in maze.neighbors((r, c)):
+            # 移动到新网格，尝试收集该位置的资源，获取更新后的资源收集位图
             next_collected_bitmap = try_trigger_resource_at(collected_bitmap, nxt)
             next_state = (nxt[0], nxt[1], next_collected_bitmap)
+            
+            # 若该状态此前已被遍历过，跳过以避免死循环
             if next_state in parent:
                 continue
+                
+            # 记录新状态的父节点和步数，并入队继续搜索
             parent[next_state] = current_state
             depth[next_state] = depth[current_state] + 1
             queue.append(next_state)
 
+    # 3. 最优路径重建
     if best_exit_state is None:
         raise ValueError(f"No path from {start} to {exit_pos}")
 
+    # 从最优终点状态逆向回溯，提取出坐标序列
     walk_path: List[Position] = []
     cursor: Tuple[int, int, int] | None = best_exit_state
     while cursor is not None:
         walk_path.append((cursor[0], cursor[1]))
         cursor = parent[cursor]
-    walk_path.reverse()
+    walk_path.reverse()  # 翻转序列使其从起点指向终点
 
+    # 计算该最优路径下收集到的总资源收益
     max_resource = evaluate_accumulated_gain(best_exit_state[2])
+    
+    # 统计元信息，供上层日志和性能评估使用
     branch_gains: Dict[str, int] = {
         "resource_cells": registry.get_total_resources_count(),
         "state_count": len(parent),
         "objective": max_resource,
     }
+    
+    # 4. 生成可视化动作序列帧 (Step Frames)
     frames: List[StepFrame] = []
     running_resource = 0
     triggered: Set[Position] = set()
     resource_cells_in_order: List[Position] = []
 
+    # 辅助函数：向帧序列中追加当前的移动状态快照
     def append_frame(current_path: List[Position], current: Position, description: str) -> None:
         frames.append(
             StepFrame(
@@ -134,10 +164,14 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
             )
         )
 
+    # 记录起始帧状态
     append_frame([start], start, "从起点开始分析最优资源路径")
+    
+    # 顺向遍历计算出每一步的收益与触发记录，并生成可视化帧
     for index, pos in enumerate(walk_path[1:], start=1):
         gain_here = 0
         idx = registry.get_resource_id_at(pos)
+        # 如果本格是资源格且在该路径上是首次触发（金币/陷阱只能收集一次）
         if idx is not None and pos not in triggered:
             triggered.add(pos)
             resource_cells_in_order.append(pos)
