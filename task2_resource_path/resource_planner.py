@@ -308,47 +308,59 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
                             parent_state[(next_mask, v)] = (mask, u)
 
     # 第三阶段：最优解仲裁
-    # 默认最优是什么都不做（收益 0，步数 0）
-    max_gain = 0
-    min_steps = 0
-    best_state = None
+    # 业务意图：从所有 DP 状态计算结果中，查询获得资源分最高、步数最短的那个最优 TSP 状态
+    def query_best_tsp_state() -> Tuple[int, int] | None:
+        candidates = [
+            (mask, u)
+            for mask in range(1 << K)
+            for u in range(K)
+            if dp[(mask, u)] != float('inf')
+        ]
+        if not candidates:
+            return None
+        return max(
+            candidates,
+            key=lambda state: (evaluate_accumulated_gain_from_bitmap(state[0]), -dp[state])
+        )
 
-    for mask in range(1 << K):
-        gain = evaluate_accumulated_gain_from_bitmap(mask)
-        for u in range(K):
-            steps = dp[(mask, u)]
-            if steps != float('inf'):
-                if gain > max_gain or (gain == max_gain and steps < min_steps):
-                    max_gain = gain
-                    min_steps = steps
-                    best_state = (mask, u)
-
+    best_state = query_best_tsp_state()
     if best_state is None:
         return ResourcePlan(0, [], [], [], {}, [])
 
-    # 回溯资源点序列
-    resource_sequence = []
-    curr_state: Tuple[int, int] | None = best_state
-    while curr_state is not None:
-        mask, u = curr_state
-        resource_sequence.append(u)
-        curr_state = parent_state.get(curr_state)
-    resource_sequence.reverse()
+    max_gain = evaluate_accumulated_gain_from_bitmap(best_state[0])
 
-    # 拼接物理路径
-    walk_path: List[Position] = []
-    if len(resource_sequence) == 1:
-        u = resource_sequence[0]
-        walk_path = [registry.get_resource_position(u)]
-    else:
-        for idx in range(len(resource_sequence) - 1):
-            u = resource_sequence[idx]
-            v = resource_sequence[idx+1]
+    # 业务意图：根据最优终点 TSP 状态，逆向回溯出所经过的资源点索引序列
+    def reconstruct_resource_sequence_from(start_state: Tuple[int, int]) -> List[int]:
+        sequence: List[int] = []
+        curr: Tuple[int, int] | None = start_state
+        while curr is not None:
+            _, u = curr
+            sequence.append(u)
+            curr = parent_state.get(curr)
+        sequence.reverse()
+        return sequence
+
+    resource_sequence = reconstruct_resource_sequence_from(best_state)
+
+    # 业务意图：根据资源点索引序列，拼接出完整的物理路径坐标序列
+    def reconstruct_walk_path_from(sequence: List[int]) -> List[Position]:
+        if not sequence:
+            return []
+        if len(sequence) == 1:
+            return [registry.get_resource_position(sequence[0])]
+        
+        path: List[Position] = []
+        for idx in range(len(sequence) - 1):
+            u = sequence[idx]
+            v = sequence[idx + 1]
             segment = path_between[u][v]
-            if not walk_path:
-                walk_path.extend(segment)
+            if not path:
+                path.extend(segment)
             else:
-                walk_path.extend(segment[1:])
+                path.extend(segment[1:])
+        return path
+
+    walk_path = reconstruct_walk_path_from(resource_sequence)
 
     resource_cells_in_order = [registry.get_resource_position(u) for u in resource_sequence]
 
