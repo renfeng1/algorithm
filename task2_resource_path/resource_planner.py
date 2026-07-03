@@ -310,6 +310,18 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
 
     dist, path_between = build_direct_paths_between_resources()
 
+    def get_direct_distance_between(u: int, v: int) -> float:
+        # 业务意图：获取两个资源点之间的直连步数距离
+        return dist[u][v]
+
+    def get_direct_path_between(u: int, v: int) -> List[Position]:
+        # 业务意图：获取两个资源点之间的直连物理轨迹段
+        return path_between[u][v]
+
+    def has_direct_connection(u: int, v: int) -> bool:
+        # 业务意图：判定两个资源点之间是否存在不穿越其它资源点的直连边
+        return dist[u][v] != float('inf')
+
     # 第二阶段：TSP 状态压缩 DP
     dp: Dict[Tuple[int, int], float] = { (mask, u): float('inf') for mask in range(1 << K) for u in range(K) }
     parent_state: Dict[Tuple[int, int], Tuple[int, int]] = {}
@@ -324,9 +336,9 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
                 continue
             for v in range(K):
                 if not (mask & (1 << v)):
-                    if dist[u][v] != float('inf'):
+                    if has_direct_connection(u, v):
                         next_mask = mask | (1 << v)
-                        cost = dp[(mask, u)] + dist[u][v]
+                        cost = dp[(mask, u)] + get_direct_distance_between(u, v)
                         if cost < dp[(next_mask, v)]:
                             dp[(next_mask, v)] = cost
                             parent_state[(next_mask, v)] = (mask, u)
@@ -377,7 +389,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         for idx in range(len(sequence) - 1):
             u = sequence[idx]
             v = sequence[idx + 1]
-            segment = path_between[u][v]
+            segment = get_direct_path_between(u, v)
             if not path:
                 path.extend(segment)
             else:
