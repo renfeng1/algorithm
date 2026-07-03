@@ -258,8 +258,8 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         paths_matrix = [[[] for _ in range(K)] for _ in range(K)]
 
         # 业务意图：判定是否在探路时遇到了除了起点之外的其它资源点
-        # 技术实现：若是，则必须停止向外延伸以保证路径的“直达性”与“纯粹性”（不中途隐含穿过其它资源）
-        def should_stop_exploration_at(pos: Position, start_pos: Position) -> bool:
+        # 技术实现：如果是另一个资源点，则根据算法规则需要停止向外延伸，以保证路径的直达性
+        def is_another_resource_besides(pos: Position, start_pos: Position) -> bool:
             return pos != start_pos and registry.has_resource_at(pos)
 
         # 业务意图：通过 BFS 寻找从某个资源点出发、不穿越其它资源点的全部“直达”路径树结构
@@ -269,7 +269,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
             
             while queue:
                 curr = queue.popleft()
-                if should_stop_exploration_at(curr, start_pos):
+                if is_another_resource_besides(curr, start_pos):
                     continue
                     
                 for nxt in maze.neighbors(curr):
