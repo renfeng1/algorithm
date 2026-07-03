@@ -257,25 +257,32 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         dist_matrix = [[float('inf')] * K for _ in range(K)]
         paths_matrix = [[[] for _ in range(K)] for _ in range(K)]
 
-        for i, start_pos in enumerate(registry.all_resource_positions):
-            dist_matrix[i][i] = 0
-            paths_matrix[i][i] = [start_pos]
+        # 业务意图：判定是否在探路时遇到了除了起点之外的其它资源点
+        # 技术实现：若是，则必须停止向外延伸以保证路径的“直达性”与“纯粹性”（不中途隐含穿过其它资源）
+        def should_stop_exploration_at(pos: Position, start_pos: Position) -> bool:
+            return pos != start_pos and registry.has_resource_at(pos)
+
+        # 业务意图：通过 BFS 寻找从某个资源点出发、不穿越其它资源点的全部“直达”路径树结构
+        def find_direct_paths_from(start_pos: Position) -> Dict[Position, Position | None]:
             queue = deque([start_pos])
             parent_map = {start_pos: None}
             
             while queue:
                 curr = queue.popleft()
-                
-                # 关键：如果在 BFS 过程中遇到了【其他的资源点】，停止从该点继续向外探索。
-                # 这样找到的最短路必然是“纯粹”的：要么是不穿过任何其他资源的直达路径，
-                # 要么是绕开其他资源的避让路径。穿过其他资源的路径将由后续 DP 自行组合。
-                if curr != start_pos and registry.has_resource_at(curr):
+                if should_stop_exploration_at(curr, start_pos):
                     continue
                     
                 for nxt in maze.neighbors(curr):
                     if nxt not in parent_map:
                         parent_map[nxt] = curr
                         queue.append(nxt)
+            return parent_map
+
+        for i, start_pos in enumerate(registry.all_resource_positions):
+            dist_matrix[i][i] = 0
+            paths_matrix[i][i] = [start_pos]
+            
+            parent_map = find_direct_paths_from(start_pos)
                         
             for j, end_pos in enumerate(registry.all_resource_positions):
                 if i != j and end_pos in parent_map:
