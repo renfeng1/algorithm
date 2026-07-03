@@ -265,7 +265,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         # 业务意图：通过 BFS 寻找从某个资源点出发、不穿越其它资源点的全部“直达”路径树结构
         def find_direct_paths_from(start_pos: Position) -> Dict[Position, Position | None]:
             queue = deque([start_pos])
-            parent_map = {start_pos: None}
+            direct_search_tree = {start_pos: None}
             
             while queue:
                 curr = queue.popleft()
@@ -273,25 +273,34 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
                     continue
                     
                 for nxt in maze.neighbors(curr):
-                    if nxt not in parent_map:
-                        parent_map[nxt] = curr
+                    if nxt not in direct_search_tree:
+                        direct_search_tree[nxt] = curr
                         queue.append(nxt)
-            return parent_map
+            return direct_search_tree
+
+        # 业务意图：判定在直达探路树中是否能到达目标位置
+        def is_reachable(pos: Position, search_tree: Dict[Position, Position | None]) -> bool:
+            return pos in search_tree
+
+        # 业务意图：从直达探路树中回溯重建出从起点到目标位置的直通物理路径
+        def reconstruct_path_to(pos: Position, search_tree: Dict[Position, Position | None]) -> List[Position]:
+            path: List[Position] = []
+            cursor: Tuple[int, int] | None = pos
+            while cursor is not None:
+                path.append(cursor)
+                cursor = search_tree[cursor]
+            path.reverse()
+            return path
 
         for i, start_pos in enumerate(registry.all_resource_positions):
             dist_matrix[i][i] = 0
             paths_matrix[i][i] = [start_pos]
             
-            parent_map = find_direct_paths_from(start_pos)
+            direct_search_tree = find_direct_paths_from(start_pos)
                         
             for j, end_pos in enumerate(registry.all_resource_positions):
-                if i != j and end_pos in parent_map:
-                    path = []
-                    cursor: Tuple[int, int] | None = end_pos
-                    while cursor is not None:
-                        path.append(cursor)
-                        cursor = parent_map[cursor]
-                    path.reverse()
+                if i != j and is_reachable(end_pos, direct_search_tree):
+                    path = reconstruct_path_to(end_pos, direct_search_tree)
                     dist_matrix[i][j] = len(path) - 1
                     paths_matrix[i][j] = path
         return dist_matrix, paths_matrix
