@@ -338,6 +338,24 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         # 业务意图：获取所有可能的资源收集状态组合总数 (2 的 K 次方)
         return 1 << K
 
+    def get_shortest_steps_to_state(status: int, end_resource: int) -> float:
+        # 业务意图：查询在指定收集状态且停在特定资源点时的最少累计步数
+        return dp[(status, end_resource)]
+
+    def is_shorter_path_to_state(status: int, end_resource: int, cost: float) -> bool:
+        # 业务意图：判定候选路径步数是否比当前已记录的更短
+        return cost < dp[(status, end_resource)]
+
+    def record_better_path_to_state(status: int, end_resource: int, cost: float, predecessor: Tuple[int, int] | None) -> None:
+        # 业务意图：更新记录更优的路径步数，并建立前驱状态连接以供回溯
+        dp[(status, end_resource)] = cost
+        if predecessor is not None:
+            parent_state[(status, end_resource)] = predecessor
+
+    def get_predecessor_of_state(state: Tuple[int, int]) -> Tuple[int, int] | None:
+        # 业务意图：查询指定 TSP 状态的前驱父状态
+        return parent_state.get(state)
+
     # 第二阶段：TSP 状态压缩 DP
     dp: Dict[Tuple[int, int], float] = { 
         (mask, u): float('inf') 
@@ -348,7 +366,12 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
 
     # 初始状态：可以任意选择一个资源点空降开局，步数为 0
     for i in range(K):
-        dp[(initial_collected_status_of(i), i)] = 0
+        record_better_path_to_state(
+            status=initial_collected_status_of(i),
+            end_resource=i,
+            cost=0.0,
+            predecessor=None
+        )
 
     def try_transition_from_resource(u: int, to_resource: int, under_status: int) -> None:
         # 业务意图：尝试从当前所在的资源点 u 转移到下一个未收集的资源点 to_resource
@@ -356,14 +379,18 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         if not is_resource_collected_in(under_status, to_resource):
             if has_direct_connection(u, to_resource):
                 next_status = collect_resource_in(under_status, to_resource)
-                cost = dp[(under_status, u)] + get_direct_distance_between(u, to_resource)
-                if cost < dp[(next_status, to_resource)]:
-                    dp[(next_status, to_resource)] = cost
-                    parent_state[(next_status, to_resource)] = (under_status, u)
+                candidate_cost = get_shortest_steps_to_state(under_status, u) + get_direct_distance_between(u, to_resource)
+                if is_shorter_path_to_state(next_status, to_resource, candidate_cost):
+                    record_better_path_to_state(
+                        status=next_status, 
+                        end_resource=to_resource, 
+                        cost=candidate_cost, 
+                        predecessor=(under_status, u)
+                    )
 
     for mask in range(get_total_status_combinations()):
         for u in range(K):
-            if dp[(mask, u)] == float('inf'):
+            if get_shortest_steps_to_state(mask, u) == float('inf'):
                 continue
             for v in range(K):
                 try_transition_from_resource(u, to_resource=v, under_status=mask)
@@ -375,13 +402,16 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
             (mask, u)
             for mask in range(get_total_status_combinations())
             for u in range(K)
-            if dp[(mask, u)] != float('inf')
+            if get_shortest_steps_to_state(mask, u) != float('inf')
         ]
         if not candidates:
             return None
         return max(
             candidates,
-            key=lambda state: (evaluate_accumulated_gain_from_bitmap(state[0]), -dp[state])
+            key=lambda state: (
+                evaluate_accumulated_gain_from_bitmap(state[0]), 
+                -get_shortest_steps_to_state(state[0], state[1])
+            )
         )
 
     best_state = query_best_tsp_state()
@@ -397,7 +427,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         while curr is not None:
             _, u = curr
             sequence.append(u)
-            curr = parent_state.get(curr)
+            curr = get_predecessor_of_state(curr)
         sequence.reverse()
         return sequence
 
