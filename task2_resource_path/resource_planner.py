@@ -358,9 +358,9 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
 
     # 第二阶段：TSP 状态压缩 DP
     dp: Dict[Tuple[int, int], float] = { 
-        (status, u): float('inf') 
+        (status, endpoint): float('inf') 
         for status in range(get_status_space_upper_bound()) 
-        for u in range(K) 
+        for endpoint in range(K) 
     }
     parent_state: Dict[Tuple[int, int], Tuple[int, int]] = {}
 
@@ -373,31 +373,35 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
             predecessor=None
         )
 
-    def try_transition_from_resource(u: int, to_resource: int, under_status: int) -> None:
-        # 业务意图：尝试从当前所在的资源点 u 转移到下一个未收集的资源点 to_resource
+    def try_transition_from_resource(from_resource: int, next_resource: int, under_status: int) -> None:
+        # 业务意图：尝试从当前所在的资源点 from_resource 转移到下一个未收集的资源点 next_resource
         # 技术实现：检查连通性并进行 DP 状态的最短路径松弛更新，同时记录回溯父状态
-        if not is_resource_collected_in_status(under_status, to_resource):
-            if has_direct_connection(u, to_resource):
-                next_status = collect_resource_in_status(under_status, to_resource)
-                candidate_cost = get_shortest_steps_to_state(under_status, u) + get_direct_distance_between(u, to_resource)
-                if is_shorter_path_to_state(next_status, to_resource, candidate_cost):
+        if not is_resource_collected_in_status(under_status, next_resource):
+            if has_direct_connection(from_resource, next_resource):
+                next_status = collect_resource_in_status(under_status, next_resource)
+                candidate_cost = get_shortest_steps_to_state(under_status, from_resource) + get_direct_distance_between(from_resource, next_resource)
+                if is_shorter_path_to_state(next_status, next_resource, candidate_cost):
                     record_better_path_to_state(
                         status=next_status, 
-                        end_resource=to_resource, 
+                        end_resource=next_resource, 
                         cost=candidate_cost, 
-                        predecessor=(under_status, u)
+                        predecessor=(under_status, from_resource)
                     )
 
-    def extend_paths_from_endpoint(u: int, under_status: int) -> None:
+    def extend_paths_from_endpoint(current_endpoint: int, under_status: int) -> None:
         # 业务意图：对于给定的收集状态和当前所处端点，尝试向外延伸收集下一个资源点
-        for v in range(K):
-            try_transition_from_resource(u, to_resource=v, under_status=under_status)
+        for candidate_resource in range(K):
+            try_transition_from_resource(
+                from_resource=current_endpoint, 
+                next_resource=candidate_resource, 
+                under_status=under_status
+            )
 
     def explore_states_for_status(status: int) -> None:
         # 业务意图：探索在特定资源收集状态下，以各个资源点为终点的所有可行路径并向外延伸
-        for u in range(K):
-            if get_shortest_steps_to_state(status, u) != float('inf'):
-                extend_paths_from_endpoint(u, under_status=status)
+        for current_endpoint in range(K):
+            if get_shortest_steps_to_state(status, current_endpoint) != float('inf'):
+                extend_paths_from_endpoint(current_endpoint, under_status=status)
 
     for start_status in range(get_status_space_upper_bound()):
         explore_states_for_status(start_status)
@@ -406,10 +410,10 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     # 业务意图：从所有 DP 状态计算结果中，查询获得资源分最高、步数最短的那个最优 TSP 状态
     def query_best_tsp_state() -> Tuple[int, int] | None:
         candidates = [
-            (status, u)
+            (status, endpoint)
             for status in range(get_status_space_upper_bound())
-            for u in range(K)
-            if get_shortest_steps_to_state(status, u) != float('inf')
+            for endpoint in range(K)
+            if get_shortest_steps_to_state(status, endpoint) != float('inf')
         ]
         if not candidates:
             return None
@@ -432,8 +436,8 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         sequence: List[int] = []
         curr: Tuple[int, int] | None = start_state
         while curr is not None:
-            _, u = curr
-            sequence.append(u)
+            _, endpoint = curr
+            sequence.append(endpoint)
             curr = get_predecessor_of_state(curr)
         sequence.reverse()
         return sequence
