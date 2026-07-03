@@ -102,28 +102,17 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
     # 记录每个状态的移动步数（路径长度），用于在收益相同时进行“短路径优先”的仲裁
     depth: Dict[Tuple[int, int, int], int] = {state: 0}
     
-    # 终点最优状态指针，初始化为 None（除非起点即终点）
-    best_exit_state = state if start == exit_pos else None
+    # 收集所有能够成功到达终点的状态候选集
+    exit_states: List[Tuple[int, int, int]] = [state] if start == exit_pos else []
 
     # 2. 状态空间搜索（BFS 遍历）
     while queue:
         r, c, collected_bitmap = queue.popleft()
         current_state = (r, c, collected_bitmap)
         
-        # 如果当前状态到达了终点坐标
+        # 如果当前状态到达了终点坐标，加入候选集，并停止继续从终点扩展
         if (r, c) == exit_pos:
-            if best_exit_state is None:
-                # 第一次到达终点，将其记为当前最优终点状态
-                best_exit_state = current_state
-            else:
-                # 已经有候选最优终点状态，进行双关键字评估仲裁：
-                # 优先级 1：最大化资源总收益（越多越好）
-                # 优先级 2：若收益相同，则最小化步数/路径深度（越短越好）
-                current_key = (evaluate_accumulated_gain(collected_bitmap), -depth[current_state])
-                best_key = (evaluate_accumulated_gain(best_exit_state[2]), -depth[best_exit_state])
-                if current_key > best_key:
-                    best_exit_state = current_state
-            # 注意：到达终点后不继续向外扩展，因为不需要经过终点后再折返回终点
+            exit_states.append(current_state)
             continue
 
         # 遍历当前位置的相邻网格
@@ -141,7 +130,17 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
             depth[next_state] = depth[current_state] + 1
             queue.append(next_state)
 
-    # 3. 最优路径重建
+    # 3. 终点选择与最优路径重建
+    # 业务意图：从所有到达终点的可能状态中，查询最优的那个状态（收益最大，步数最短）
+    def query_best_exit_state() -> Tuple[int, int, int] | None:
+        if not exit_states:
+            return None
+        return max(
+            exit_states,
+            key=lambda s: (evaluate_accumulated_gain(s[2]), -depth[s])
+        )
+
+    best_exit_state = query_best_exit_state()
     if best_exit_state is None:
         raise ValueError(f"No path from {start} to {exit_pos}")
 
