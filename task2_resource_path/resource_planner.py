@@ -358,8 +358,8 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
 
     # 第二阶段：TSP 状态压缩 DP
     dp: Dict[Tuple[int, int], float] = { 
-        (mask, u): float('inf') 
-        for mask in range(get_status_bitmap_upper_bound()) 
+        (status_bitmap, u): float('inf') 
+        for status_bitmap in range(get_status_bitmap_upper_bound()) 
         for u in range(K) 
     }
     parent_state: Dict[Tuple[int, int], Tuple[int, int]] = {}
@@ -399,17 +399,17 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
             if get_shortest_steps_to_state(status, u) != float('inf'):
                 extend_paths_from_endpoint(u, under_status=status)
 
-    for mask in range(get_status_bitmap_upper_bound()):
-        explore_states_for_status(mask)
+    for status_bitmap in range(get_status_bitmap_upper_bound()):
+        explore_states_for_status(status_bitmap)
 
     # 第三阶段：最优解仲裁
     # 业务意图：从所有 DP 状态计算结果中，查询获得资源分最高、步数最短的那个最优 TSP 状态
     def query_best_tsp_state() -> Tuple[int, int] | None:
         candidates = [
-            (mask, u)
-            for mask in range(get_status_bitmap_upper_bound())
+            (status_bitmap, u)
+            for status_bitmap in range(get_status_bitmap_upper_bound())
             for u in range(K)
-            if get_shortest_steps_to_state(mask, u) != float('inf')
+            if get_shortest_steps_to_state(status_bitmap, u) != float('inf')
         ]
         if not candidates:
             return None
@@ -464,7 +464,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
 
     branch_gains = {
         "resource_cells": K,
-        "dp_states": (1 << K) * K,
+        "dp_states": get_status_bitmap_upper_bound() * K,
         "objective": max_gain
     }
 
