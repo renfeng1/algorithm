@@ -59,14 +59,14 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
         current = collected_bitmap
         while current:
             bit = current & -current
-            total += registry.value_for_index(bit.bit_length() - 1)
+            total += registry.get_resource_value(bit.bit_length() - 1)
             current -= bit
         return total
 
     # 业务意图：当移动到新坐标时，尝试触发并收集该位置的资源（若存在）
     # 技术实现：若坐标命中资源索引表，则将 bitmap 中对应的二进制位设为 1，并返回更新后的 bitmap
     def try_trigger_resource_at(current_bitmap: int, pos: Position) -> int:
-        idx = registry.bitmap_index_for(pos)
+        idx = registry.get_resource_id_at(pos)
         if idx is not None:
             return current_bitmap | (1 << idx)
         return current_bitmap
@@ -113,7 +113,7 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
 
     max_resource = evaluate_accumulated_gain(best_exit_state[2])
     branch_gains: Dict[str, int] = {
-        "resource_cells": registry.total_count(),
+        "resource_cells": registry.get_total_resources_count(),
         "state_count": len(parent),
         "objective": max_resource,
     }
@@ -137,7 +137,7 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
     append_frame([start], start, "从起点开始分析最优资源路径")
     for index, pos in enumerate(walk_path[1:], start=1):
         gain_here = 0
-        idx = registry.bitmap_index_for(pos)
+        idx = registry.get_resource_id_at(pos)
         if idx is not None and pos not in triggered:
             triggered.add(pos)
             resource_cells_in_order.append(pos)
@@ -165,7 +165,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     利用 图论抽象 + 状态压缩 DP 极大提升搜索效率。
     """
     registry = MazeResourceRegistry(maze)
-    K = registry.total_count()
+    K = registry.get_total_resources_count()
     
     if K == 0:
         return ResourcePlan(0, [], [], [], {}, [])
@@ -175,7 +175,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         current = collected_bitmap
         while current:
             bit = current & -current
-            total += registry.value_for_index(bit.bit_length() - 1)
+            total += registry.get_resource_value(bit.bit_length() - 1)
             current -= bit
         return total
 
@@ -267,7 +267,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     walk_path: List[Position] = []
     if len(resource_sequence) == 1:
         u = resource_sequence[0]
-        walk_path = [registry.position_for_index(u)]
+        walk_path = [registry.get_resource_position(u)]
     else:
         for idx in range(len(resource_sequence) - 1):
             u = resource_sequence[idx]
@@ -278,7 +278,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
             else:
                 walk_path.extend(segment[1:])
 
-    resource_cells_in_order = [registry.position_for_index(u) for u in resource_sequence]
+    resource_cells_in_order = [registry.get_resource_position(u) for u in resource_sequence]
 
     branch_gains = {
         "resource_cells": K,

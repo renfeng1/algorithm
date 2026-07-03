@@ -5,7 +5,7 @@ from common.rules import GOLD_VALUE, TRAP_VALUE
 class MazeResourceRegistry:
     """
     业务意图：统一管理和查询迷宫内金币和陷阱等资源的注册表。
-    通过查询函数替代原有的临时变量，以更好地体现各个数据结构的业务含义。
+    通过业务概念（如资源 ID、位置、分值）隐藏底层的状态压缩位图实现，表达 "what" 与 "why"。
     """
     def __init__(self, maze: MazeGame):
         self.maze = maze
@@ -15,28 +15,28 @@ class MazeResourceRegistry:
             for c, value in enumerate(row)
             if value in {Cell.GOLD.value, Cell.TRAP.value}
         ]
-        self._position_to_bitmap_index = {pos: i for i, pos in enumerate(self.all_resource_positions)}
-        self._bitmap_index_to_value = [
+        self._position_to_id = {pos: i for i, pos in enumerate(self.all_resource_positions)}
+        self._id_to_value = [
             GOLD_VALUE if maze.grid[r][c] == Cell.GOLD.value else TRAP_VALUE
             for r, c in self.all_resource_positions
         ]
 
-    def bitmap_index_for(self, pos: Position) -> int | None:
-        """根据网格坐标，查询其在收集状态位图（collected_bitmap）中对应的二进制位索引"""
-        return self._position_to_bitmap_index.get(pos)
+    def get_resource_id_at(self, pos: Position) -> int | None:
+        """业务意图：获取网格坐标处资源的唯一标识符。如果该坐标没有资源，返回 None。"""
+        return self._position_to_id.get(pos)
 
-    def value_for_index(self, index: int) -> int:
-        """根据位图中的二进制位索引，查询该资源的净收益值（金币为正，陷阱为负）"""
-        return self._bitmap_index_to_value[index]
+    def get_resource_value(self, resource_id: int) -> int:
+        """业务意图：获取指定资源 ID 对应的业务价值（金币为正分，陷阱为负分）。"""
+        return self._id_to_value[resource_id]
 
-    def position_for_index(self, index: int) -> Position:
-        """根据二进制位索引，获取该资源的物理网格坐标"""
-        return self.all_resource_positions[index]
+    def get_resource_position(self, resource_id: int) -> Position:
+        """业务意图：获取指定资源 ID 对应的物理网格坐标。"""
+        return self.all_resource_positions[resource_id]
 
-    def total_count(self) -> int:
-        """获取地图上所有可触发资源（金币和陷阱）的总数"""
+    def get_total_resources_count(self) -> int:
+        """业务意图：获取地图上所有注册的可触发资源的总数。"""
         return len(self.all_resource_positions)
 
     def has_resource_at(self, pos: Position) -> bool:
-        """判断某个物理网格坐标是否是注册的资源格"""
-        return pos in self._position_to_bitmap_index
+        """业务意图：判断指定的网格坐标上是否注册了资源。"""
+        return pos in self._position_to_id
