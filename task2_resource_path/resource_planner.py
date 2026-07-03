@@ -322,22 +322,42 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         # 业务意图：判定两个资源点之间是否存在不穿越其它资源点的直连边
         return dist[u][v] != float('inf')
 
+    def initial_collected_status_of(resource_idx: int) -> int:
+        # 业务意图：获取仅收集了单个指定资源点时的初始状态位图
+        return 1 << resource_idx
+
+    def is_resource_collected_in(status_bitmap: int, resource_idx: int) -> bool:
+        # 业务意图：判定在当前收集状态位图中，指定资源点是否已被收集
+        return bool(status_bitmap & (1 << resource_idx))
+
+    def collect_resource_in(status_bitmap: int, resource_idx: int) -> int:
+        # 业务意图：在当前收集状态中加入指定资源点，并返回更新后的收集状态位图
+        return status_bitmap | (1 << resource_idx)
+
+    def get_total_status_combinations() -> int:
+        # 业务意图：获取所有可能的资源收集状态组合总数 (2 的 K 次方)
+        return 1 << K
+
     # 第二阶段：TSP 状态压缩 DP
-    dp: Dict[Tuple[int, int], float] = { (mask, u): float('inf') for mask in range(1 << K) for u in range(K) }
+    dp: Dict[Tuple[int, int], float] = { 
+        (mask, u): float('inf') 
+        for mask in range(get_total_status_combinations()) 
+        for u in range(K) 
+    }
     parent_state: Dict[Tuple[int, int], Tuple[int, int]] = {}
 
     # 初始状态：可以任意选择一个资源点空降开局，步数为 0
     for i in range(K):
-        dp[(1 << i, i)] = 0
+        dp[(initial_collected_status_of(i), i)] = 0
 
-    for mask in range(1 << K):
+    for mask in range(get_total_status_combinations()):
         for u in range(K):
             if dp[(mask, u)] == float('inf'):
                 continue
             for v in range(K):
-                if not (mask & (1 << v)):
+                if not is_resource_collected_in(mask, v):
                     if has_direct_connection(u, v):
-                        next_mask = mask | (1 << v)
+                        next_mask = collect_resource_in(mask, v)
                         cost = dp[(mask, u)] + get_direct_distance_between(u, v)
                         if cost < dp[(next_mask, v)]:
                             dp[(next_mask, v)] = cost
@@ -348,7 +368,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     def query_best_tsp_state() -> Tuple[int, int] | None:
         candidates = [
             (mask, u)
-            for mask in range(1 << K)
+            for mask in range(get_total_status_combinations())
             for u in range(K)
             if dp[(mask, u)] != float('inf')
         ]
