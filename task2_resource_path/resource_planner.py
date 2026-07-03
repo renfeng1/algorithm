@@ -350,18 +350,23 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     for i in range(K):
         dp[(initial_collected_status_of(i), i)] = 0
 
+    def try_transition_from_resource(u: int, to_resource: int, under_status: int) -> None:
+        # 业务意图：尝试从当前所在的资源点 u 转移到下一个未收集的资源点 to_resource
+        # 技术实现：检查连通性并进行 DP 状态的最短路径松弛更新，同时记录回溯父状态
+        if not is_resource_collected_in(under_status, to_resource):
+            if has_direct_connection(u, to_resource):
+                next_status = collect_resource_in(under_status, to_resource)
+                cost = dp[(under_status, u)] + get_direct_distance_between(u, to_resource)
+                if cost < dp[(next_status, to_resource)]:
+                    dp[(next_status, to_resource)] = cost
+                    parent_state[(next_status, to_resource)] = (under_status, u)
+
     for mask in range(get_total_status_combinations()):
         for u in range(K):
             if dp[(mask, u)] == float('inf'):
                 continue
             for v in range(K):
-                if not is_resource_collected_in(mask, v):
-                    if has_direct_connection(u, v):
-                        next_mask = collect_resource_in(mask, v)
-                        cost = dp[(mask, u)] + get_direct_distance_between(u, v)
-                        if cost < dp[(next_mask, v)]:
-                            dp[(next_mask, v)] = cost
-                            parent_state[(next_mask, v)] = (mask, u)
+                try_transition_from_resource(u, to_resource=v, under_status=mask)
 
     # 第三阶段：最优解仲裁
     # 业务意图：从所有 DP 状态计算结果中，查询获得资源分最高、步数最短的那个最优 TSP 状态
