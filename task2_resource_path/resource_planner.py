@@ -242,9 +242,9 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     if K == 0:
         return ResourcePlan(0, [], [], [], {}, [])
 
-    def evaluate_accumulated_gain_from_bitmap(collected_bitmap: int) -> int:
+    def evaluate_accumulated_gain_from_status(collected_status: int) -> int:
         total = 0
-        current = collected_bitmap
+        current = collected_status
         while current:
             bit = current & -current
             total += registry.get_resource_value(bit.bit_length() - 1)
@@ -322,20 +322,20 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         # 业务意图：判定两个资源点之间是否存在不穿越其它资源点的直连边
         return dist[u][v] != float('inf')
 
-    def initial_collected_status_of(resource_idx: int) -> int:
-        # 业务意图：获取仅收集了单个指定资源点时的初始状态位图
+    def initial_status_of(resource_idx: int) -> int:
+        # 业务意图：获取仅收集了单个指定资源点时的初始状态数值表示
         return 1 << resource_idx
 
-    def is_resource_collected_in(status_bitmap: int, resource_idx: int) -> bool:
-        # 业务意图：判定在当前收集状态位图中，指定资源点是否已被收集
-        return bool(status_bitmap & (1 << resource_idx))
+    def is_resource_collected_in_status(status: int, resource_idx: int) -> bool:
+        # 业务意图：判定在当前收集状态中，指定资源点是否已被收集
+        return bool(status & (1 << resource_idx))
 
-    def collect_resource_in(status_bitmap: int, resource_idx: int) -> int:
-        # 业务意图：在当前收集状态中加入指定资源点，并返回更新后的收集状态位图
-        return status_bitmap | (1 << resource_idx)
+    def collect_resource_in_status(status: int, resource_idx: int) -> int:
+        # 业务意图：在当前收集状态中加入指定资源点，并返回更新后的状态数值表示
+        return status | (1 << resource_idx)
 
-    def get_status_bitmap_upper_bound() -> int:
-        # 业务意图：获取收集状态位图的数值上限（2 的 K 次方，用于迭代范围）
+    def get_status_space_upper_bound() -> int:
+        # 业务意图：获取收集状态空间的取值上限（2 的 K 次方，用于迭代范围）
         return 1 << K
 
     def get_shortest_steps_to_state(status: int, end_resource: int) -> float:
@@ -358,8 +358,8 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
 
     # 第二阶段：TSP 状态压缩 DP
     dp: Dict[Tuple[int, int], float] = { 
-        (status_bitmap, u): float('inf') 
-        for status_bitmap in range(get_status_bitmap_upper_bound()) 
+        (status, u): float('inf') 
+        for status in range(get_status_space_upper_bound()) 
         for u in range(K) 
     }
     parent_state: Dict[Tuple[int, int], Tuple[int, int]] = {}
@@ -367,7 +367,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     # 初始状态：可以任意选择一个资源点空降开局，步数为 0
     for i in range(K):
         record_better_path_to_state(
-            status=initial_collected_status_of(i),
+            status=initial_status_of(i),
             end_resource=i,
             cost=0.0,
             predecessor=None
@@ -376,9 +376,9 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     def try_transition_from_resource(u: int, to_resource: int, under_status: int) -> None:
         # 业务意图：尝试从当前所在的资源点 u 转移到下一个未收集的资源点 to_resource
         # 技术实现：检查连通性并进行 DP 状态的最短路径松弛更新，同时记录回溯父状态
-        if not is_resource_collected_in(under_status, to_resource):
+        if not is_resource_collected_in_status(under_status, to_resource):
             if has_direct_connection(u, to_resource):
-                next_status = collect_resource_in(under_status, to_resource)
+                next_status = collect_resource_in_status(under_status, to_resource)
                 candidate_cost = get_shortest_steps_to_state(under_status, u) + get_direct_distance_between(u, to_resource)
                 if is_shorter_path_to_state(next_status, to_resource, candidate_cost):
                     record_better_path_to_state(
@@ -399,24 +399,24 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
             if get_shortest_steps_to_state(status, u) != float('inf'):
                 extend_paths_from_endpoint(u, under_status=status)
 
-    for status_bitmap in range(get_status_bitmap_upper_bound()):
-        explore_states_for_status(status_bitmap)
+    for start_status in range(get_status_space_upper_bound()):
+        explore_states_for_status(start_status)
 
     # 第三阶段：最优解仲裁
     # 业务意图：从所有 DP 状态计算结果中，查询获得资源分最高、步数最短的那个最优 TSP 状态
     def query_best_tsp_state() -> Tuple[int, int] | None:
         candidates = [
-            (status_bitmap, u)
-            for status_bitmap in range(get_status_bitmap_upper_bound())
+            (status, u)
+            for status in range(get_status_space_upper_bound())
             for u in range(K)
-            if get_shortest_steps_to_state(status_bitmap, u) != float('inf')
+            if get_shortest_steps_to_state(status, u) != float('inf')
         ]
         if not candidates:
             return None
         return max(
             candidates,
             key=lambda state: (
-                evaluate_accumulated_gain_from_bitmap(state[0]), 
+                evaluate_accumulated_gain_from_status(state[0]), 
                 -get_shortest_steps_to_state(state[0], state[1])
             )
         )
@@ -425,7 +425,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     if best_state is None:
         return ResourcePlan(0, [], [], [], {}, [])
 
-    max_gain = evaluate_accumulated_gain_from_bitmap(best_state[0])
+    max_gain = evaluate_accumulated_gain_from_status(best_state[0])
 
     # 业务意图：根据最优终点 TSP 状态，逆向回溯出所经过的资源点索引序列
     def reconstruct_resource_sequence_from(start_state: Tuple[int, int]) -> List[int]:
@@ -464,7 +464,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
 
     branch_gains = {
         "resource_cells": K,
-        "dp_states": get_status_bitmap_upper_bound() * K,
+        "dp_states": get_status_space_upper_bound() * K,
         "objective": max_gain
     }
 
