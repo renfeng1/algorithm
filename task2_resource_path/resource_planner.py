@@ -257,6 +257,11 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         dist_matrix = [[float('inf')] * K for _ in range(K)]
         paths_matrix = [[[] for _ in range(K)] for _ in range(K)]
 
+        def register_direct_path_between(u: int, v: int, path: List[Position]) -> None:
+            # 业务意图：在邻接距离图中，注册记录两个资源点之间的直通物理轨迹以及对应的步数开销
+            dist_matrix[u][v] = len(path) - 1
+            paths_matrix[u][v] = path
+
         # 业务意图：判定是否在探路时遇到了除了起点之外的其它资源点
         # 技术实现：如果是另一个资源点，则根据算法规则需要停止向外延伸，以保证路径的直达性
         def is_another_resource_besides(pos: Position, start_pos: Position) -> bool:
@@ -293,16 +298,14 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
             return path
 
         for i, start_pos in enumerate(registry.all_resource_positions):
-            dist_matrix[i][i] = 0
-            paths_matrix[i][i] = [start_pos]
+            register_direct_path_between(i, i, [start_pos])
             
             direct_search_tree = find_direct_paths_from(start_pos)
                         
             for j, end_pos in enumerate(registry.all_resource_positions):
                 if i != j and is_reachable(end_pos, direct_search_tree):
                     path = reconstruct_path_to(end_pos, direct_search_tree)
-                    dist_matrix[i][j] = len(path) - 1
-                    paths_matrix[i][j] = path
+                    register_direct_path_between(i, j, path)
         return dist_matrix, paths_matrix
 
     dist, path_between = build_direct_paths_between_resources()
