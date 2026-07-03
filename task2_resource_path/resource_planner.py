@@ -388,12 +388,19 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
                         predecessor=(under_status, u)
                     )
 
-    for mask in range(get_status_bitmap_upper_bound()):
+    def extend_paths_from_endpoint(u: int, under_status: int) -> None:
+        # 业务意图：对于给定的收集状态和当前所处端点，尝试向外延伸收集下一个资源点
+        for v in range(K):
+            try_transition_from_resource(u, to_resource=v, under_status=under_status)
+
+    def explore_states_for_status(status: int) -> None:
+        # 业务意图：探索在特定资源收集状态下，以各个资源点为终点的所有可行路径并向外延伸
         for u in range(K):
-            if get_shortest_steps_to_state(mask, u) == float('inf'):
-                continue
-            for v in range(K):
-                try_transition_from_resource(u, to_resource=v, under_status=mask)
+            if get_shortest_steps_to_state(status, u) != float('inf'):
+                extend_paths_from_endpoint(u, under_status=status)
+
+    for mask in range(get_status_bitmap_upper_bound()):
+        explore_states_for_status(mask)
 
     # 第三阶段：最优解仲裁
     # 业务意图：从所有 DP 状态计算结果中，查询获得资源分最高、步数最短的那个最优 TSP 状态
