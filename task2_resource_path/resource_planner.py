@@ -334,8 +334,8 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         # 业务意图：在当前收集状态中加入指定资源点，并返回更新后的收集状态位图
         return status_bitmap | (1 << resource_idx)
 
-    def get_total_status_combinations() -> int:
-        # 业务意图：获取所有可能的资源收集状态组合总数 (2 的 K 次方)
+    def get_status_bitmap_upper_bound() -> int:
+        # 业务意图：获取收集状态位图的数值上限（2 的 K 次方，用于迭代范围）
         return 1 << K
 
     def get_shortest_steps_to_state(status: int, end_resource: int) -> float:
@@ -359,7 +359,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     # 第二阶段：TSP 状态压缩 DP
     dp: Dict[Tuple[int, int], float] = { 
         (mask, u): float('inf') 
-        for mask in range(get_total_status_combinations()) 
+        for mask in range(get_status_bitmap_upper_bound()) 
         for u in range(K) 
     }
     parent_state: Dict[Tuple[int, int], Tuple[int, int]] = {}
@@ -388,7 +388,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
                         predecessor=(under_status, u)
                     )
 
-    for mask in range(get_total_status_combinations()):
+    for mask in range(get_status_bitmap_upper_bound()):
         for u in range(K):
             if get_shortest_steps_to_state(mask, u) == float('inf'):
                 continue
@@ -400,7 +400,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     def query_best_tsp_state() -> Tuple[int, int] | None:
         candidates = [
             (mask, u)
-            for mask in range(get_total_status_combinations())
+            for mask in range(get_status_bitmap_upper_bound())
             for u in range(K)
             if get_shortest_steps_to_state(mask, u) != float('inf')
         ]
