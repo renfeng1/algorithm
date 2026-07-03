@@ -398,8 +398,11 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
             )
 
     def explore_states_for_status(status: int) -> None:
-        # 业务意图：探索在特定资源收集状态下，以各个资源点为终点的所有可行路径并向外延伸
+        # 业务意图：探索在特定资源收集状态下，以达成某个资源点搜集状态为终点的所有可行路径并向外延伸
         for current_endpoint in range(K):
+            # 剪枝：如果当前终点资源点在当前状态中尚未被收集，说明该状态不可能合法，直接跳过
+            if not is_resource_collected_in_status(status, current_endpoint):
+                continue
             if get_shortest_steps_to_state(status, current_endpoint) != float('inf'):
                 extend_paths_from_endpoint(current_endpoint, under_status=status)
 
