@@ -73,6 +73,24 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
 
     initial_collected_bitmap = try_trigger_resource_at(0, start)
 
+    # =========================================================================
+    # 状态压缩 DP (State Compression Dynamic Programming) 原理说明：
+    #
+    # 1. DP 状态定义：
+    #    dp[r][c][collected_bitmap] 表示从起点 (start) 出发，到达网格坐标 (r, c)，
+    #    且当前已触发的资源状态为 collected_bitmap（按位记录每个资源 ID 是否已被触发）时的【最少移动步数】。
+    #
+    # 2. DP 状态转移方程：
+    #    对于当前位置 (r, c) 的每一个可通行邻居 nxt:
+    #    next_bitmap = try_trigger_resource_at(collected_bitmap, nxt)
+    #    dp[nxt.r][nxt.c][next_bitmap] = min(dp[nxt.r][nxt.c][next_bitmap], dp[r][c][collected_bitmap] + 1)
+    #
+    # 3. 算法实现与状态剪枝：
+    #    由于图的边权（每次移动）均为 1，我们使用状态空间 (r, c, collected_bitmap) 上的 BFS
+    #    来实现该 DP。在无权图 BFS 中，每个状态第一次入队时，其对应的路径深度即为 dp 的最优解（最小步数）。
+    #    通过 `next_state in parent` 的去重判断，我们实现了对已计算 DP 状态的剪枝。
+    # =========================================================================
+
     # 1. 状态定义与初始化
     # 每个搜索状态表示为：(行, 列, 当前已收集资源的位图)
     state = (start[0], start[1], initial_collected_bitmap)
