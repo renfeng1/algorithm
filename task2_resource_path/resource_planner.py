@@ -144,13 +144,17 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
     if best_exit_state is None:
         raise ValueError(f"No path from {start} to {exit_pos}")
 
-    # 从最优终点状态逆向回溯，提取出坐标序列
-    walk_path: List[Position] = []
-    cursor: Tuple[int, int, int] | None = best_exit_state
-    while cursor is not None:
-        walk_path.append((cursor[0], cursor[1]))
-        cursor = parent[cursor]
-    walk_path.reverse()  # 翻转序列使其从起点指向终点
+    # 业务意图：根据最优终点状态，沿着状态转移链逆向回溯，重建出顺向的物理网格坐标路径
+    def reconstruct_path_from(exit_state: Tuple[int, int, int]) -> List[Position]:
+        path: List[Position] = []
+        cursor: Tuple[int, int, int] | None = exit_state
+        while cursor is not None:
+            path.append((cursor[0], cursor[1]))
+            cursor = parent[cursor]
+        path.reverse()  # 翻转序列使其从起点指向终点
+        return path
+
+    walk_path = reconstruct_path_from(best_exit_state)
 
     # 计算该最优路径下收集到的总资源收益
     max_resource = evaluate_accumulated_gain(best_exit_state[2])
