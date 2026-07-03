@@ -54,7 +54,7 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
 
     # 业务意图：评估当前资源收集状态的总净收益（吃金币加分，踩陷阱扣分）
     # 技术实现：利用 lowbit (Brian Kernighan 算法) 极速跳过 bitmap 中的 0，仅对为 1 的资源位进行累加
-    def evaluate_accumulated_gain(collected_bitmap: int) -> int:
+    def evaluate_accumulated_gain_from_bitmap(collected_bitmap: int) -> int:
         total = 0
         current = collected_bitmap
         while current:
@@ -62,6 +62,10 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
             total += registry.get_resource_value(bit.bit_length() - 1)
             current -= bit
         return total
+
+    def collected_bitmap_of(state: Tuple[int, int, int]) -> int:
+        """业务意图：从高维搜索状态中，提取出当前已收集资源的位图表示"""
+        return state[2]
 
     # 业务意图：当移动到新坐标时，尝试触发并收集该位置的资源（若存在）
     # 技术实现：若坐标命中资源索引表，则将 bitmap 中对应的二进制位设为 1，并返回更新后的 bitmap
@@ -137,7 +141,7 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
             return None
         return max(
             exit_states,
-            key=lambda s: (evaluate_accumulated_gain(s[2]), -depth[s])
+            key=lambda s: (evaluate_accumulated_gain_from_bitmap(collected_bitmap_of(s)), -depth[s])
         )
 
     best_exit_state = query_best_exit_state()
@@ -156,8 +160,8 @@ def plan_optimal_resource_path(maze: MazeGame) -> ResourcePlan:
 
     walk_path = reconstruct_path_from(best_exit_state)
 
-    # 计算该最优路径下收集到的总资源收益
-    max_resource = evaluate_accumulated_gain(best_exit_state[2])
+    # 计算该最优路径下根据收集的位图得到的总资源收益
+    max_resource = evaluate_accumulated_gain_from_bitmap(collected_bitmap_of(best_exit_state))
     
     # 统计元信息，供上层日志和性能评估使用
     branch_gains: Dict[str, int] = {
@@ -225,7 +229,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     if K == 0:
         return ResourcePlan(0, [], [], [], {}, [])
 
-    def evaluate_accumulated_gain(collected_bitmap: int) -> int:
+    def evaluate_accumulated_gain_from_bitmap(collected_bitmap: int) -> int:
         total = 0
         current = collected_bitmap
         while current:
@@ -297,7 +301,7 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
     best_state = None
 
     for mask in range(1 << K):
-        gain = evaluate_accumulated_gain(mask)
+        gain = evaluate_accumulated_gain_from_bitmap(mask)
         for u in range(K):
             steps = dp[(mask, u)]
             if steps != float('inf'):
