@@ -252,39 +252,44 @@ def plan_global_optimal_collection(maze: MazeGame) -> ResourcePlan:
         return total
 
     # 第一阶段：提取资源图 (Graph Abstraction)
-    dist = [[float('inf')] * K for _ in range(K)]
-    path_between = [[[] for _ in range(K)] for _ in range(K)]
+    # 业务意图：计算所有资源点之间的最短直达距离与物理路径，建立精简的邻接距离图
+    def build_direct_paths_between_resources() -> Tuple[List[List[float]], List[List[List[Position]]]]:
+        dist_matrix = [[float('inf')] * K for _ in range(K)]
+        paths_matrix = [[[] for _ in range(K)] for _ in range(K)]
 
-    for i, start_pos in enumerate(registry.all_resource_positions):
-        dist[i][i] = 0
-        path_between[i][i] = [start_pos]
-        queue = deque([start_pos])
-        parent_map = {start_pos: None}
-        
-        while queue:
-            curr = queue.popleft()
+        for i, start_pos in enumerate(registry.all_resource_positions):
+            dist_matrix[i][i] = 0
+            paths_matrix[i][i] = [start_pos]
+            queue = deque([start_pos])
+            parent_map = {start_pos: None}
             
-            # 关键：如果在 BFS 过程中遇到了【其他的资源点】，停止从该点继续向外探索。
-            # 这样找到的最短路必然是“纯粹”的：要么是不穿过任何其他资源的直达路径，
-            # 要么是绕开其他资源的避让路径。穿过其他资源的路径将由后续 DP 自行组合。
-            if curr != start_pos and registry.has_resource_at(curr):
-                continue
+            while queue:
+                curr = queue.popleft()
                 
-            for nxt in maze.neighbors(curr):
-                if nxt not in parent_map:
-                    parent_map[nxt] = curr
-                    queue.append(nxt)
+                # 关键：如果在 BFS 过程中遇到了【其他的资源点】，停止从该点继续向外探索。
+                # 这样找到的最短路必然是“纯粹”的：要么是不穿过任何其他资源的直达路径，
+                # 要么是绕开其他资源的避让路径。穿过其他资源的路径将由后续 DP 自行组合。
+                if curr != start_pos and registry.has_resource_at(curr):
+                    continue
                     
-        for j, end_pos in enumerate(registry.all_resource_positions):
-            if i != j and end_pos in parent_map:
-                path = []
-                cursor: Tuple[int, int] | None = end_pos
-                while cursor is not None:
-                    path.append(cursor)
-                    cursor = parent_map[cursor]
-                path.reverse()
-                dist[i][j] = len(path) - 1
-                path_between[i][j] = path
+                for nxt in maze.neighbors(curr):
+                    if nxt not in parent_map:
+                        parent_map[nxt] = curr
+                        queue.append(nxt)
+                        
+            for j, end_pos in enumerate(registry.all_resource_positions):
+                if i != j and end_pos in parent_map:
+                    path = []
+                    cursor: Tuple[int, int] | None = end_pos
+                    while cursor is not None:
+                        path.append(cursor)
+                        cursor = parent_map[cursor]
+                    path.reverse()
+                    dist_matrix[i][j] = len(path) - 1
+                    paths_matrix[i][j] = path
+        return dist_matrix, paths_matrix
+
+    dist, path_between = build_direct_paths_between_resources()
 
     # 第二阶段：TSP 状态压缩 DP
     dp: Dict[Tuple[int, int], float] = { (mask, u): float('inf') for mask in range(1 << K) for u in range(K) }
