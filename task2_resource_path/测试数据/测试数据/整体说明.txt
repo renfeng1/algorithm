@@ -1,0 +1,11 @@
+迷宫组：
+task1_maze_generate：使用脚本mazeTest.py测试四种生成迷宫的结果，是不是连通和唯一通路，并记录结果到txt文件
+task2_DP：使用文件夹中的3个迷宫进行最优资源路径收取，并记录结果json文件
+task3_boss：使用文件夹中的5个boss战文件进行boss战，并记录结果json文件
+
+
+
+AI组：
+task4_resourcePickup：使用文件夹中的5个迷宫进行实时资源收取，并记录结果json文件
+task5_explore_maze：使用文件夹中的3个迷宫进行迷宫探险，并记录结果json文件
+交叉测试数据集：使用文件夹中的11个迷宫进行迷宫探险，并记录结果json文件
